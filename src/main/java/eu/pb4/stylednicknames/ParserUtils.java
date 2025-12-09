@@ -4,15 +4,15 @@ import eu.pb4.placeholders.api.parsers.NodeParser;
 import eu.pb4.placeholders.api.parsers.tag.TagRegistry;
 import eu.pb4.stylednicknames.config.ConfigManager;
 import me.lucko.fabric.api.permissions.v0.Permissions;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Formatting;
+import net.minecraft.ChatFormatting;
+import net.minecraft.server.level.ServerPlayer;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 
 public class ParserUtils {
 
-    public static NodeParser getParser(@Nullable ServerPlayerEntity player) {
+    public static NodeParser getParser(@Nullable ServerPlayer player) {
         var b = NodeParser.builder();
         var config = ConfigManager.getConfig();
 
@@ -20,7 +20,7 @@ public class ParserUtils {
             var registry = TagRegistry.create();
             for (var entry : TagRegistry.SAFE.getTags()) {
                 if ((config.defaultFormattingCodes.getBoolean(entry.name())
-                        || Permissions.check(player.getCommandSource(), "stylednicknames.format." + entry.name(), 2))) {
+                        || Permissions.check(player.createCommandSourceStack(), "stylednicknames.format." + entry.name(), 2))) {
                     registry.register(entry);
                 }
             }
@@ -28,8 +28,8 @@ public class ParserUtils {
                     .customTagRegistry(registry);
 
             if (config.configData.allowLegacyFormatting) {
-                var formats = new ArrayList<Formatting>();
-                for (Formatting formatting : Formatting.values()) {
+                var formats = new ArrayList<ChatFormatting>();
+                for (ChatFormatting formatting : ChatFormatting.values()) {
                     if (registry.getTag(formatting.getName()) != null) {
                         formats.add(formatting);
                     }

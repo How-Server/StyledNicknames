@@ -1,13 +1,13 @@
 package eu.pb4.stylednicknames;
 
-import net.minecraft.server.network.ServerPlayNetworkHandler;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 import java.util.function.Function;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
 
 public interface NicknameHolder {
     NicknameHolder EMPTY = new NicknameHolder() {
@@ -21,18 +21,18 @@ public interface NicknameHolder {
         }
 
         @Override
-        public @Nullable Text styledNicknames$getParsed() {
+        public @Nullable Component styledNicknames$getParsed() {
             return null;
         }
 
         @Override
-        public @Nullable MutableText styledNicknames$getOutput() {
+        public @Nullable MutableComponent styledNicknames$getOutput() {
             return null;
         }
 
         @Override
-        public MutableText styledNicknames$getOutputOrVanilla() {
-            return Text.empty();
+        public MutableComponent styledNicknames$getOutputOrVanilla() {
+            return Component.empty();
         }
 
         @Override
@@ -49,22 +49,22 @@ public interface NicknameHolder {
         }
 
         @Override
-        public Function<String, Text> styledNicknames$placeholdersCommand() {
-            return x -> Text.empty();
+        public Function<String, Component> styledNicknames$placeholdersCommand() {
+            return x -> Component.empty();
         }
     };
 
-    static NicknameHolder of(ServerPlayerEntity player) {
-        return (NicknameHolder) player.networkHandler;
+    static NicknameHolder of(ServerPlayer player) {
+        return (NicknameHolder) player.connection;
     }
 
-    static NicknameHolder of(ServerPlayNetworkHandler handler) {
+    static NicknameHolder of(ServerGamePacketListenerImpl handler) {
         return (NicknameHolder) handler;
     }
 
     static NicknameHolder of(Object possiblePlayer) {
-        if (possiblePlayer instanceof ServerPlayerEntity player) {
-            return (NicknameHolder) player.networkHandler;
+        if (possiblePlayer instanceof ServerPlayer player) {
+            return (NicknameHolder) player.connection;
         }
         return EMPTY;
     }
@@ -75,12 +75,12 @@ public interface NicknameHolder {
     String styledNicknames$get();
 
     @Nullable
-    Text styledNicknames$getParsed();
+    Component styledNicknames$getParsed();
 
     @Nullable
-    MutableText styledNicknames$getOutput();
+    MutableComponent styledNicknames$getOutput();
 
-    MutableText styledNicknames$getOutputOrVanilla();
+    MutableComponent styledNicknames$getOutputOrVanilla();
 
     boolean styledNicknames$requiresPermission();
 
@@ -88,5 +88,5 @@ public interface NicknameHolder {
 
     boolean styledNicknames$shouldDisplay();
 
-    Function<String, Text> styledNicknames$placeholdersCommand();
+    Function<String, Component> styledNicknames$placeholdersCommand();
 }

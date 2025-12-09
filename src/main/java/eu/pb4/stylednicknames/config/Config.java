@@ -10,13 +10,12 @@ import eu.pb4.placeholders.api.parsers.TagLikeParser;
 import eu.pb4.placeholders.api.parsers.TagParser;
 import eu.pb4.stylednicknames.config.data.ConfigData;
 import it.unimi.dsi.fastutil.objects.Object2BooleanArrayMap;
-import net.minecraft.text.Text;
-
 import java.util.function.Function;
+import net.minecraft.network.chat.Component;
 
 
 public final class Config {
-    public static final ParserContext.Key<Function<String, Text>> KEY = DynamicTextNode.key("styled_nicknames");
+    public static final ParserContext.Key<Function<String, Component>> KEY = DynamicTextNode.key("styled_nicknames");
 
     public static final NodeParser PARSER = NodeParser.builder()
             .simplifiedTextFormat()
@@ -31,8 +30,8 @@ public final class Config {
     public final TextNode nicknameFormatColor;
     public final TextNode changeText;
     public final TextNode resetText;
-    public final Text tooLongText;
-    public final Text nicknameCantContainSpacesText;
+    public final Component tooLongText;
+    public final Component nicknameCantContainSpacesText;
 
     public Config(ConfigData data) {
         this.configData = data;
