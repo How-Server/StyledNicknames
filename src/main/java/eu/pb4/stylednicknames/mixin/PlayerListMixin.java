@@ -1,6 +1,7 @@
 package eu.pb4.stylednicknames.mixin;
 
 import eu.pb4.stylednicknames.NicknameHolder;
+import me.lucko.fabric.api.permissions.v0.Permissions;
 import net.minecraft.network.Connection;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
@@ -15,5 +16,8 @@ public class PlayerListMixin {
     @Inject(method = "placeNewPlayer", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/players/PlayerList;sendPlayerPermissionLevel(Lnet/minecraft/server/level/ServerPlayer;)V", shift = At.Shift.AFTER))
     private void styledNicknames$loadNickname(Connection connection, ServerPlayer player, CommonListenerCookie clientData, CallbackInfo ci) {
         NicknameHolder.of(player).styledNicknames$loadData();
+        if (!Permissions.check(player,"stylednicknames.use")){
+            NicknameHolder.of(player).styledNicknames$set(null, false);
+        }
     }
 }
