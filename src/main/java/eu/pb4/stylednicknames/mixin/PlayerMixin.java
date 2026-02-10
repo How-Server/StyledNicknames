@@ -3,36 +3,36 @@ package eu.pb4.stylednicknames.mixin;
 import eu.pb4.stylednicknames.NicknameHolder;
 import eu.pb4.stylednicknames.NicknameCache;
 import eu.pb4.stylednicknames.config.ConfigManager;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.world.World;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 
-@Mixin(PlayerEntity.class)
-public abstract class PlayerEntityMixin extends LivingEntity implements NicknameCache {
+@Mixin(Player.class)
+public abstract class PlayerMixin extends LivingEntity implements NicknameCache {
     @Unique private boolean styledNicknames$ignoreNextCall = false;
-    @Unique private Text styledNicknames$cachedName = null;
+    @Unique private Component styledNicknames$cachedName = null;
     @Unique private int styledNicknames$cachedAge = -999;
 
-    protected PlayerEntityMixin(EntityType<? extends LivingEntity> entityType, World world) {
+    protected PlayerMixin(EntityType<? extends LivingEntity> entityType, Level world) {
         super(entityType, world);
     }
 
-    @ModifyArg(method = "getDisplayName", at = @At(value = "INVOKE", target = "Lnet/minecraft/scoreboard/Team;decorateName(Lnet/minecraft/scoreboard/AbstractTeam;Lnet/minecraft/text/Text;)Lnet/minecraft/text/MutableText;"))
-    private Text styledNicknames$replaceName(Text text) {
+    @ModifyArg(method = "getDisplayName", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/scores/PlayerTeam;formatNameForTeam(Lnet/minecraft/world/scores/Team;Lnet/minecraft/network/chat/Component;)Lnet/minecraft/network/chat/MutableComponent;"))
+    private Component styledNicknames$replaceName(Component text) {
         try {
             if (ConfigManager.isEnabled() && ConfigManager.getConfig().configData.changeDisplayName) {
-                if (this.styledNicknames$cachedAge == this.age) {
+                if (this.styledNicknames$cachedAge == this.tickCount) {
                     return this.styledNicknames$cachedName;
                 }
 
-                if (this.getWorld().getServer() != null && !this.getWorld().getServer().isOnThread()) {
+                if (this.level().getServer() != null && !this.level().getServer().isSameThread()) {
                     return text;
                 }
 
@@ -40,11 +40,11 @@ public abstract class PlayerEntityMixin extends LivingEntity implements Nickname
                     this.styledNicknames$ignoreNextCall = true;
                     var holder = NicknameHolder.of(this);
                     if (holder != null && holder.styledNicknames$shouldDisplay()) {
-                        Text name = holder.styledNicknames$getOutput();
+                        Component name = holder.styledNicknames$getOutput();
                         if (name != null) {
                             this.styledNicknames$ignoreNextCall = false;
                             this.styledNicknames$cachedName = name;
-                            this.styledNicknames$cachedAge = this.age;
+                            this.styledNicknames$cachedAge = this.tickCount;
                             return name;
                         }
                     }

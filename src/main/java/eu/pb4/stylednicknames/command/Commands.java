@@ -15,19 +15,18 @@ import me.drex.vanish.api.VanishAPI;
 import me.lucko.fabric.api.permissions.v0.Permissions;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.command.CommandSource;
-import net.minecraft.command.argument.EntityArgumentType;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerPlayer;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static net.minecraft.server.command.CommandManager.argument;
-import static net.minecraft.server.command.CommandManager.literal;
+import static net.minecraft.commands.Commands.argument;
+import static net.minecraft.commands.Commands.literal;
 
 public class Commands {
     public static final boolean VANISH = FabricLoader.getInstance().isModLoaded("melius-vanish");
@@ -46,7 +45,7 @@ public class Commands {
 
                             .then(literal("set")
                                     .requires(Permissions.require("stylednicknames.change_others", 3))
-                                    .then(argument("player", EntityArgumentType.player())
+                                    .then(argument("player", EntityArgument.player())
                                             .then(argument("nickname", StringArgumentType.greedyString()).suggests(OTHER_PREVIOUS_NICKNAME_PROVIDER)
                                                     .executes(Commands::changeOther)
                                             )
@@ -54,7 +53,7 @@ public class Commands {
                             )
                             .then(literal("clear")
                                     .requires(Permissions.require("stylednicknames.change_others", 3))
-                                    .then(argument("player", EntityArgumentType.player())
+                                    .then(argument("player", EntityArgument.player())
                                             .executes(Commands::resetOther)
                                     )
                             )
@@ -88,106 +87,112 @@ public class Commands {
         });
     }
 
-    private static int change(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        NicknameHolder holder = NicknameHolder.of(context.getSource().getPlayerOrThrow());
+    private static int change(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        NicknameHolder holder = NicknameHolder.of(context.getSource().getPlayerOrException());
         var config = ConfigManager.getConfig();
         var nickname = context.getArgument("nickname", String.class);
         if (config.configData.maxLength > 0) {
-            var parser = ParserUtils.getParser(context.getSource().getPlayerOrThrow());
+            var parser = ParserUtils.getParser(context.getSource().getPlayerOrException());
             var output = parser.parseText(nickname, ParserContext.of());
 
             if (output.getString().length() > config.configData.maxLength && !Permissions.check(context.getSource(), "stylednicknames.ignore_limit", 2)) {
-                context.getSource().sendFeedback(() -> ConfigManager.getConfig().tooLongText, false);
+                context.getSource().sendSuccess(() -> ConfigManager.getConfig().tooLongText, false);
                 return 1;
             }
         }
 
+        if(nickname.contains(" ") && !config.configData.allowSpacesInNicknames){
+            context.getSource().sendSuccess(() -> config.nicknameCantContainSpacesText, false);
+            return 1;
+        }
+
+
         holder.styledNicknames$set(nickname, true);
-        context.getSource().sendFeedback(() ->
+        context.getSource().sendSuccess(() ->
                         ConfigManager.getConfig().changeText.toText(ParserContext.of(Config.KEY, holder.styledNicknames$placeholdersCommand())),
                 false);
         return 0;
     }
 
-    private static int reset(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        NicknameHolder.of(context.getSource().getPlayerOrThrow()).styledNicknames$set(null, false);
-        context.getSource().sendFeedback(() ->
+    private static int reset(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        NicknameHolder.of(context.getSource().getPlayerOrException()).styledNicknames$set(null, false);
+        context.getSource().sendSuccess(() ->
                         ConfigManager.getConfig().resetText.toText(ParserContext.of(Config.KEY, (x) -> context.getSource().getPlayer().getName()
                         )),
                 false);
         return 0;
     }
 
-    private static int changeOther(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerPlayerEntity player = EntityArgumentType.getPlayer(context, "player");
+    private static int changeOther(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(context, "player");
         NicknameHolder.of(player).styledNicknames$set(context.getArgument("nickname", String.class), false);
-        context.getSource().sendFeedback(() -> Text.translatable("Changed nickname of %s to %s", player.getName(), NicknameHolder.of(player).styledNicknames$getOutputOrVanilla()), false);
+        context.getSource().sendSuccess(() -> Component.translatable("Changed nickname of %s to %s", player.getName(), NicknameHolder.of(player).styledNicknames$getOutputOrVanilla()), false);
         return 0;
     }
 
-    private static int resetOther(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
-        ServerPlayerEntity player = EntityArgumentType.getPlayer(context, "player");
+    private static int resetOther(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(context, "player");
         NicknameHolder.of(player).styledNicknames$set(null, false);
-        context.getSource().sendFeedback(() -> Text.translatable("Cleared nickname of %s", player.getName()), false);
+        context.getSource().sendSuccess(() -> Component.translatable("Cleared nickname of %s", player.getName()), false);
         return 0;
     }
 
-    private static int realname(CommandContext<ServerCommandSource> context) {
+    private static int realname(CommandContext<CommandSourceStack> context) {
         String nickname = StringArgumentType.getString(context, "nickname");
-        List<ServerPlayerEntity> players = context.getSource().getServer().getPlayerManager().getPlayerList();
-        Map<ServerPlayerEntity, MutableText> foundPlayers = new HashMap<>();
-        for (ServerPlayerEntity player : players) {
-            MutableText output = NicknameHolder.of(player).styledNicknames$getOutput();
+        List<ServerPlayer> players = context.getSource().getServer().getPlayerList().getPlayers();
+        Map<ServerPlayer, MutableComponent> foundPlayers = new HashMap<>();
+        for (ServerPlayer player : players) {
+            MutableComponent output = NicknameHolder.of(player).styledNicknames$getOutput();
             if (output == null) continue;
             if (output.getString().equals(nickname) && canSeePlayer(player, context.getSource())) {
                 foundPlayers.put(player, output);
             }
         }
         if (foundPlayers.isEmpty()) {
-            context.getSource().sendError(Text.literal("No player with that nickname is currently online."));
+            context.getSource().sendFailure(Component.literal("No player with that nickname is currently online."));
         } else {
             if (foundPlayers.size() > 1) {
-                context.getSource().sendFeedback(() -> Text.translatable("Found %s players with that nickname:", foundPlayers.size()), false);
+                context.getSource().sendSuccess(() -> Component.translatable("Found %s players with that nickname:", foundPlayers.size()), false);
             }
             foundPlayers.forEach((serverPlayerEntity, mutableText) -> {
-                        context.getSource().sendFeedback(() -> Text.translatable("The real name of %s is %s.", serverPlayerEntity.getDisplayName(), serverPlayerEntity.getNameForScoreboard()), false);
+                        context.getSource().sendSuccess(() -> Component.translatable("The real name of %s is %s.", serverPlayerEntity.getDisplayName(), serverPlayerEntity.getScoreboardName()), false);
                     }
             );
         }
         return 0;
     }
 
-    private static int reloadConfig(CommandContext<ServerCommandSource> context) {
+    private static int reloadConfig(CommandContext<CommandSourceStack> context) {
         if (ConfigManager.loadConfig()) {
-            context.getSource().sendFeedback(() -> Text.literal("Reloaded config!"), false);
+            context.getSource().sendSuccess(() -> Component.literal("Reloaded config!"), false);
         } else {
-            context.getSource().sendError(Text.literal("Error occurred while reloading config!").formatted(Formatting.RED));
+            context.getSource().sendFailure(Component.literal("Error occurred while reloading config!").withStyle(ChatFormatting.RED));
 
         }
         return 1;
     }
 
-    private static int about(CommandContext<ServerCommandSource> context) {
-        context.getSource().sendFeedback(() -> Text.literal("Styled Nicknames")
-                .formatted(Formatting.BLUE)
-                .append(Text.literal(" - " + StyledNicknamesMod.VERSION)
-                        .formatted(Formatting.WHITE)
+    private static int about(CommandContext<CommandSourceStack> context) {
+        context.getSource().sendSuccess(() -> Component.literal("Styled Nicknames")
+                .withStyle(ChatFormatting.BLUE)
+                .append(Component.literal(" - " + StyledNicknamesMod.VERSION)
+                        .withStyle(ChatFormatting.WHITE)
                 ), false);
 
         return 1;
     }
 
-    private static final SuggestionProvider<ServerCommandSource> PREVIOUS_NICKNAME_PROVIDER = (source, builder) -> {
-        ServerPlayerEntity player = source.getSource().getPlayer();
-        return CommandSource.suggestMatching(getNicknameSuggestion(player), builder);
+    private static final SuggestionProvider<CommandSourceStack> PREVIOUS_NICKNAME_PROVIDER = (source, builder) -> {
+        ServerPlayer player = source.getSource().getPlayer();
+        return SharedSuggestionProvider.suggest(getNicknameSuggestion(player), builder);
     };
 
-    private static final SuggestionProvider<ServerCommandSource> OTHER_PREVIOUS_NICKNAME_PROVIDER = (source, builder) -> {
-        ServerPlayerEntity player = EntityArgumentType.getPlayer(source, "player");
-        return CommandSource.suggestMatching(getNicknameSuggestion(player), builder);
+    private static final SuggestionProvider<CommandSourceStack> OTHER_PREVIOUS_NICKNAME_PROVIDER = (source, builder) -> {
+        ServerPlayer player = EntityArgument.getPlayer(source, "player");
+        return SharedSuggestionProvider.suggest(getNicknameSuggestion(player), builder);
     };
 
-    private static Collection<String> getNicknameSuggestion(ServerPlayerEntity player) {
+    private static Collection<String> getNicknameSuggestion(ServerPlayer player) {
         if (player != null) {
             String nickname = NicknameHolder.of(player).styledNicknames$get();
             if (nickname != null) {
@@ -197,22 +202,22 @@ public class Commands {
         return Collections.emptyList();
     }
 
-    private static boolean canSeePlayer(ServerPlayerEntity player, ServerCommandSource viewing) {
+    private static boolean canSeePlayer(ServerPlayer player, CommandSourceStack viewing) {
         if (VANISH) {
-            return VanishAPI.canSeePlayer(player.getServer(), player.getUuid(), viewing);
+            return VanishAPI.canSeePlayer(player.level().getServer(), player.getUUID(), viewing);
         }
         return true;
     }
 
-    private static final SuggestionProvider<ServerCommandSource> NICKNAME_PROVIDER = (context, builder) -> {
-        List<ServerPlayerEntity> players = context.getSource().getServer().getPlayerManager().getPlayerList();
+    private static final SuggestionProvider<CommandSourceStack> NICKNAME_PROVIDER = (context, builder) -> {
+        List<ServerPlayer> players = context.getSource().getServer().getPlayerList().getPlayers();
         Set<String> nicknames = players.stream()
                 .filter(player -> canSeePlayer(player, context.getSource()))
                 .map(player -> NicknameHolder.of(player).styledNicknames$getOutput())
                 .filter(Objects::nonNull)
-                .map(Text::getString)
+                .map(Component::getString)
                 .collect(Collectors.toSet());
-        return CommandSource.suggestMatching(nicknames, builder);
+        return SharedSuggestionProvider.suggest(nicknames, builder);
     };
 
 }

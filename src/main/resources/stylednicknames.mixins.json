@@ -4,10 +4,10 @@
   "package": "eu.pb4.stylednicknames.mixin",
   "compatibilityLevel": "JAVA_16",
   "mixins": [
-    "PlayerEntityMixin",
-    "PlayerManagerMixin",
-    "ServerPlayerEntityMixin",
-    "ServerPlayNetworkHandlerMixin"
+    "PlayerMixin",
+    "PlayerListMixin",
+    "ServerPlayerMixin",
+    "ServerGamePacketListenerImplMixin"
   ],
   "client": [
   ],

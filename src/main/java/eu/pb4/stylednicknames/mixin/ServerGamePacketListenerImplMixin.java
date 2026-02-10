@@ -1,7 +1,6 @@
 package eu.pb4.stylednicknames.mixin;
 
 import eu.pb4.placeholders.api.ParserContext;
-import eu.pb4.placeholders.api.Placeholders;
 import eu.pb4.playerdata.api.PlayerDataApi;
 import eu.pb4.stylednicknames.NicknameCache;
 import eu.pb4.stylednicknames.NicknameHolder;
@@ -9,35 +8,34 @@ import eu.pb4.stylednicknames.ParserUtils;
 import eu.pb4.stylednicknames.config.Config;
 import eu.pb4.stylednicknames.config.ConfigManager;
 import me.lucko.fabric.api.permissions.v0.Permissions;
-import net.minecraft.nbt.NbtByte;
-import net.minecraft.nbt.NbtString;
-import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayNetworkHandler;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.nbt.ByteTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
 import static eu.pb4.stylednicknames.StyledNicknamesMod.id;
 
 
-@Mixin(ServerPlayNetworkHandler.class)
-public class ServerPlayNetworkHandlerMixin implements NicknameHolder {
+@Mixin(ServerGamePacketListenerImpl.class)
+public class ServerGamePacketListenerImplMixin implements NicknameHolder {
     @Shadow
-    public ServerPlayerEntity player;
+    public ServerPlayer player;
     @Unique
     private String styledNicknames$nickname = null;
     @Unique
-    private Text styledNicknames$parsedNicknameRaw = null;
+    private Component styledNicknames$parsedNicknameRaw = null;
     @Unique
     private boolean colorOnlyMode = false;
     @Unique
@@ -46,8 +44,8 @@ public class ServerPlayNetworkHandlerMixin implements NicknameHolder {
     @Override
     public void styledNicknames$loadData() {
         try {
-            NbtString nickname = PlayerDataApi.getGlobalDataFor(player, id("nickname"), NbtString.TYPE);
-            NbtByte permissions = PlayerDataApi.getGlobalDataFor(player, id("permission"), NbtByte.TYPE);
+            StringTag nickname = PlayerDataApi.getGlobalDataFor(player, id("nickname"), StringTag.TYPE);
+            ByteTag permissions = PlayerDataApi.getGlobalDataFor(player, id("permission"), ByteTag.TYPE);
 
             if (nickname != null) {
                 this.styledNicknames$set(nickname.value(),  permissions != null && permissions.byteValue() > 0);
@@ -60,28 +58,28 @@ public class ServerPlayNetworkHandlerMixin implements NicknameHolder {
     @Override
     public void styledNicknames$set(String nickname, boolean requirePermission) {
         Config config = ConfigManager.getConfig();
-        ServerCommandSource source = player.getCommandSource();
+        CommandSourceStack source = player.createCommandSourceStack();
         if (nickname == null || nickname.isEmpty() || (requirePermission && !Permissions.check(source, "stylednicknames.use", ConfigManager.getConfig().configData.allowByDefault ? 0 : 2))) {
             this.styledNicknames$nickname = null;
             this.styledNicknames$requirePermission = false;
             this.styledNicknames$parsedNicknameRaw = null;
             PlayerDataApi.setGlobalDataFor(this.player, id("nickname"), null);
-            PlayerDataApi.setGlobalDataFor(this.player, id("permission"), NbtByte.of(false));
+            PlayerDataApi.setGlobalDataFor(this.player, id("permission"), ByteTag.valueOf(false));
         } else {
             this.styledNicknames$nickname = nickname;
             this.styledNicknames$requirePermission = requirePermission;
-            PlayerDataApi.setGlobalDataFor(this.player, id("nickname"), NbtString.of(nickname));
-            PlayerDataApi.setGlobalDataFor(this.player, id("permission"), NbtByte.of(requirePermission));
+            PlayerDataApi.setGlobalDataFor(this.player, id("nickname"), StringTag.valueOf(nickname));
+            PlayerDataApi.setGlobalDataFor(this.player, id("permission"), ByteTag.valueOf(requirePermission));
 
             var text = ParserUtils.getParser(requirePermission ? this.player : null)
                     .parseText(nickname, ParserContext.of());
 
-            this.colorOnlyMode = text.getString().toLowerCase(Locale.ROOT).equals(this.player.getGameProfile().getName().toLowerCase(Locale.ROOT));
+            this.colorOnlyMode = text.getString().toLowerCase(Locale.ROOT).equals(this.player.getGameProfile().name().toLowerCase(Locale.ROOT));
             this.styledNicknames$parsedNicknameRaw = text;
         }
 
         if (config.configData.changePlayerListName) {
-            Objects.requireNonNull(this.player.getServer()).getPlayerManager().sendToAll(new PlayerListS2CPacket(PlayerListS2CPacket.Action.UPDATE_DISPLAY_NAME, this.player));
+            Objects.requireNonNull(this.player.level().getServer()).getPlayerList().broadcastAll(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME, this.player));
         }
         ((NicknameCache) this.player).styledNicknames$invalidateCache();
     }
@@ -92,19 +90,19 @@ public class ServerPlayNetworkHandlerMixin implements NicknameHolder {
     }
 
     @Override
-    public @Nullable Text styledNicknames$getParsed() {
+    public @Nullable Component styledNicknames$getParsed() {
         return this.styledNicknames$parsedNicknameRaw;
     }
 
     @Override
-    public @Nullable MutableText styledNicknames$getOutput() {
+    public @Nullable MutableComponent styledNicknames$getOutput() {
         return this.styledNicknames$parsedNicknameRaw != null
                 ? (this.colorOnlyMode ? ConfigManager.getConfig().nicknameFormatColor : ConfigManager.getConfig().nicknameFormat)
                 .toText(ParserContext.of(Config.KEY, (s) -> this.styledNicknames$parsedNicknameRaw)).copy() : null;
     }
 
     @Override
-    public MutableText styledNicknames$getOutputOrVanilla() {
+    public MutableComponent styledNicknames$getOutputOrVanilla() {
         return this.styledNicknames$parsedNicknameRaw != null
                 ? (this.colorOnlyMode ? ConfigManager.getConfig().nicknameFormatColor : ConfigManager.getConfig().nicknameFormat)
                 .toText(ParserContext.of(Config.KEY, (s) -> this.styledNicknames$parsedNicknameRaw)).copy() : this.player.getName().copy();    }
@@ -116,11 +114,11 @@ public class ServerPlayNetworkHandlerMixin implements NicknameHolder {
 
     @Override
     public boolean styledNicknames$shouldDisplay() {
-        return this.styledNicknames$parsedNicknameRaw != null && (!this.styledNicknames$requirePermission || Permissions.check(this.player.getCommandSource(), "stylednicknames.use", ConfigManager.getConfig().configData.allowByDefault ? 0 : 3));
+        return this.styledNicknames$parsedNicknameRaw != null && (!this.styledNicknames$requirePermission || Permissions.check(this.player.createCommandSourceStack(), "stylednicknames.use", ConfigManager.getConfig().configData.allowByDefault ? 0 : 3));
     }
 
     @Override
-    public Function<String, Text> styledNicknames$placeholdersCommand() {
+    public Function<String, Component> styledNicknames$placeholdersCommand() {
         var name = this.styledNicknames$getOutputOrVanilla();
         return x -> name;
     }

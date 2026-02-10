@@ -7,7 +7,7 @@ import eu.pb4.stylednicknames.config.ConfigManager;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.Identifier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -29,10 +29,10 @@ public class StyledNicknamesMod implements ModInitializer {
 			ConfigManager.loadConfig();
 		});
 
-		Placeholders.register(Identifier.of("styled-nicknames","display_name"), (ctx, arg) -> {
+		Placeholders.register(Identifier.fromNamespaceAndPath("styled-nicknames","display_name"), (ctx, arg) -> {
 			if (ctx.hasPlayer()) {
-				if (ctx.player().networkHandler != null) {
-					return PlaceholderResult.value(NicknameHolder.of(ctx.player().networkHandler).styledNicknames$getOutputOrVanilla());
+				if (ctx.player().connection != null) {
+					return PlaceholderResult.value(NicknameHolder.of(ctx.player().connection).styledNicknames$getOutputOrVanilla());
 				} else {
 					return PlaceholderResult.value(ctx.player().getName());
 				}
@@ -43,7 +43,7 @@ public class StyledNicknamesMod implements ModInitializer {
 	}
 
 	public static final Identifier id(String path) {
-		return Identifier.of(ID, path);
+		return Identifier.fromNamespaceAndPath(ID, path);
 	}
 
 }
